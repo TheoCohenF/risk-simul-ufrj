@@ -3,6 +3,9 @@ import yfinance as yf
 import pandas as pd
 import plotly 
 import plotly.graph_objects as go
+from dotenv import load_dotenv
+from langchain_bot import portofolio_generator_chain
+load_dotenv()
 
 st.set_page_config(layout="wide")
 
@@ -49,53 +52,82 @@ def run_simulation(selected_stocks):
 
     return historical_df
     
-
-def main():
+def header():
 
     st.markdown('### Risk Simulator Portfolios')
 
-    selected_stocks = select_asset()
+def chat_box():
 
 
-    st.markdown('')
+    input = st.text_input("Explique o seu objetivo financeiro e perfil de investidor", "")
 
-    st.divider()
-    if selected_stocks:
-        cols = st.columns(len(selected_stocks))
+    return input
 
-    for i, stock in enumerate(selected_stocks):
-        with cols[i]:
-            ticker = yf.Ticker(stock)
-            st.write(f"### {ticker.info['shortName']}")
-            
-    cols = st.columns(3)
+def llm_answer(user_question):
 
-    with cols[1]:
-        run = st.button('Run Simulation')
+    generated_portfolio = portofolio_generator_chain(user_question)
+    
+    st.write(generated_portfolio)
+
     
 
 
-    if selected_stocks and run:
-        df = run_simulation(selected_stocks)
 
-        # Plot with Plotly
-        fig = go.Figure()
 
-        for stock in selected_stocks:
-            print('stock',df[stock])
-            fig.add_trace(go.Scatter(x=df['Date'], y=df[stock], mode='lines', name=stock))
+def main():
 
-        fig.update_layout(
-            title='Historical Stock Prices',
-            xaxis_title='Date',
-            yaxis_title='Price',
-            template='plotly_dark',
-            hovermode='x unified',
-            width=3000,    
-            height=600
-        )
+    header()
 
-        st.plotly_chart(fig, use_container_width=True)
+    user_question = chat_box()
+
+    teste = llm_answer(user_question)
+
+    st.divider()
+
+    st.markdown('A partir dessas recomendações, podemos gerar um simulador de portfólio completo com as recomendações desejadas')
+    run = st.button('Run Simulation')
+    # selected_stocks = select_asset()
+
+
+    # st.markdown('')
+
+    # st.divider()
+    # if selected_stocks:
+    #     cols = st.columns(len(selected_stocks))
+
+    # for i, stock in enumerate(selected_stocks):
+    #     with cols[i]:
+    #         ticker = yf.Ticker(stock)
+    #         st.write(f"### {ticker.info['shortName']}")
+            
+    # cols = st.columns(3)
+
+    # with cols[1]:
+    #     run = st.button('Run Simulation')
+    
+
+
+    # if selected_stocks and run:
+    #     df = run_simulation(selected_stocks)
+
+    #     # Plot with Plotly
+    #     fig = go.Figure()
+
+    #     for stock in selected_stocks:
+    #         print('stock',df[stock])
+    #         fig.add_trace(go.Scatter(x=df['Date'], y=df[stock], mode='lines', name=stock))
+
+    #     fig.update_layout(
+    #         title='Historical Stock Prices',
+    #         xaxis_title='Date',
+    #         yaxis_title='Price',
+    #         template='plotly_dark',
+    #         hovermode='x unified',
+    #         width=3000,    
+    #         height=600
+    #     )
+
+    #     st.plotly_chart(fig, use_container_width=True)
 
 
 
