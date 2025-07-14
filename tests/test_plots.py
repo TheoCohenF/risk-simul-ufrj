@@ -3,8 +3,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import plots
-import plotly.io as pio
-pio.renderers.default = "browser"
+
 import metricas as mtc
 import yfinance as yf
 
