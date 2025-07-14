@@ -39,7 +39,8 @@ class ConstantExpectedReturn:
         )
         future_prices = self._current_price * np.exp(np.cumsum(log_returns))
         last_date = self._historical_prices.index[-1]
-        interval = last_date - self._historical_prices.index[-2]
+        # Use minimum interval between consecutive dates
+        interval = self._historical_prices.index.to_series().diff().min()
         future_dates = [
             last_date + (i + 1)*interval for i in range(len(future_prices))
         ]
