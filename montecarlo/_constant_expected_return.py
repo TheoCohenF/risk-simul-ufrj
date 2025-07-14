@@ -76,51 +76,79 @@ class ConstantExpectedReturn:
         plt.show()
         return
 
-    def plot_ytd_return(self):
-        """Plota retorno realizado e simulado para o ano corrente."""
-        # Datas do início e fim do ano atual
-        from datetime import datetime
+    def plotly_ytd_historical_vs_simulation(self, num_simulations=3000):
+        """
+        Plota, com Plotly, o preço histórico YTD e o caminho simulado começando do início do ano corrente.
+        """
 
         hist_prices = self._historical_prices
         current_year = pd.Timestamp.today().year
-        ytd_start = pd.Timestamp(f"{current_year}-01-01")
-        ytd_end = hist_prices.index[-1]
 
-        # Filtro: preços de fechamento desde 1º janeiro até o último dado
-        hist_ytd = hist_prices[hist_prices.index >= ytd_start]
+        # Ajusta timezone
+        if hist_prices.index.tz is not None:
+            ytd_start = pd.Timestamp(f"{current_year}-01-01", tz=hist_prices.index.tz)
+        else:
+            ytd_start = pd.Timestamp(f"{current_year}-01-01")
+        ytd_prices = hist_prices[hist_prices.index >= ytd_start]
 
-        if len(hist_ytd) < 2:
-            raise ValueError("Não há dados suficientes para o ano corrente.")
+        if len(ytd_prices) < 2:
+            raise ValueError("Não há dados suficientes para o ano vigente.")
 
-        # Retorno realizado YTD (de 1º jan até último fechamento disponível)
-        realized_return = hist_ytd.iloc[-1] / hist_ytd.iloc[0] - 1
+        # Preço inicial: último do ano anterior (ou primeiro do ano, se não houver anterior)
+        prev_year_prices = hist_prices[hist_prices.index < ytd_start]
+        if not prev_year_prices.empty:
+            start_price = prev_year_prices.iloc[-1]
+        else:
+            start_price = ytd_prices.iloc[0]
+        ytd_dates = ytd_prices.index
 
-        # Retorno simulado YTD: compara o último preço histórico com o último simulado
-        if self._future_prices is None:
-            raise ValueError("Execute run() antes.")
+        n_days = len(ytd_dates) - 1
+        simulations = []
+        for _ in range(num_simulations):
+            sim_returns = self._rng.normal(
+                self._difflogs_mean,
+                self._difflogs_std,
+                n_days
+            )
+            sim_prices = [start_price]
+            for r in sim_returns:
+                sim_prices.append(sim_prices[-1] * np.exp(r))
+            simulations.append(sim_prices)
 
-        # Assume que o último preço simulado corresponde ao final do horizonte futuro
-        simulated_return = self._future_prices.iloc[-1] / hist_prices.iloc[-1] - 1
+        simulated_mean = np.mean(simulations, axis=0)
 
-        # Gráfico comparativo
-        labels = ["Realizado (YTD)", "Simulado (Próx. 21 dias)"]
-        returns = [realized_return, simulated_return]
-        colors = ["tab:blue", "tab:orange"]
+        # Gráfico Plotly
+        fig = go.Figure()
 
-        plt.figure(figsize=(7, 5))
-        bars = plt.bar(labels, [100*r for r in returns], color=colors, alpha=0.8)
-        plt.ylabel("Retorno (%)")
-        plt.title(
-            f"Retorno Realizado (YTD) vs Simulado ({len(self._future_prices)} dias)\n{self._ticker.ticker}"
+        # Linha do preço real
+        fig.add_trace(go.Scatter(
+            x=ytd_dates,
+            y=ytd_prices.values,
+            mode="lines+markers",
+            name="Preço Real (YTD)",
+            line=dict(color="royalblue", width=3)
+        ))
+
+        # Linha da média simulada
+        fig.add_trace(go.Scatter(
+            x=ytd_dates,
+            y=simulated_mean,
+            mode="lines",
+            name="Preço Simulado (média)",
+            line=dict(color="darkorange", dash="dash", width=3)
+        ))
+
+        fig.update_layout(
+            title=f"Preço Real vs Simulado em {self._ticker.ticker} ({self._ticker.info.get('shortName', '')}) - {current_year}",
+            xaxis_title="Data",
+            yaxis_title="Preço",
+            legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0)', bordercolor='rgba(0,0,0,0)'),
+            hovermode="x unified",
+            width=900,
+            height=500
         )
+        fig.show()
 
-        # Adiciona valores em cima das barras
-        for bar, val in zip(bars, returns):
-            plt.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f"{val*100:.2f}%", 
-                    ha="center", va="bottom", fontsize=12)
-
-        plt.ylim(min(0, 100*min(returns))-5, max(100*max(returns), 10)+5)
-        plt.show()
 
     def plotly_correlation_heatmap(corr_matrix, title="Matriz de Correlação"):
         """
