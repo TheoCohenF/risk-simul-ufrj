@@ -21,6 +21,9 @@ class ConstantExpectedReturn:
     def get_historical_data(self):
         return self._historical_data
     
+    def get_historical_prices(self):
+        return self._historical_prices
+    
     def get_future_prices(self):
         if self._future_prices is None:
             raise ValueError(
