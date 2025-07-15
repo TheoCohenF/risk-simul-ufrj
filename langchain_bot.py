@@ -23,6 +23,7 @@ def portofolio_generator_chain(user_question):
             Você só pode utilizar ativos do S&P 500
 
             Seu objetivo é criar um portfólio diversificado de acordo com o objetivo e perfil do investidor.
+            Na hora de separar o portfólio, deixe claro a quantidade que será investida em cada ativo de maneira específica e clara.
 
             Por exemplo, se o usuário diz que tem um perfil mais agressivo, você deve passar um grupo x de ações.
 
@@ -81,6 +82,7 @@ def json_generator_chain(text, user_question):
         - O valor de cada ação deve ser um número (representando o valor a ser investido em dólares).
         - O JSON deve estar corretamente formatado.
         - Não inclua explicações ou comentários, apenas o objeto JSON.
+        - Tenha certeza que os valores investidos em cada ação somam o total de investimento sugerido pelo usuário.
         - COLOQUE APENAS O JSON DOS OBJETOS SUGERIDOS PELO TEXTO DE ENTRADA
 
         Exemplo de saída:
