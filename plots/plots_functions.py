@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import yfinance as yf
 from montecarlo import ConstantExpectedReturn
 from metricas import calc_volatility
 
@@ -43,13 +44,21 @@ def plotly_correlation_heatmap(corr_matrix, title="Matriz de Correlação"):
             )
     fig.show()
 
-def plotly_multi_ytd_historical_vs_simulation(ticker_hist_dict, num_simulations=3000):
+def plotly_multi_ytd_historical_vs_simulation(ticker_value_dict, num_simulations=3000, period="5y"):
     """
     Plota, com Plotly, os preços históricos YTD e os caminhos simulados para múltiplos tickers.
     ticker_hist_dict: dict {ticker: pandas.Series de preços}
     """
     current_year = pd.Timestamp.today().year
     fig = go.Figure()
+    ticker_hist_dict = {}
+
+    for ticker in ticker_value_dict:
+        df = yf.Ticker(ticker).history(period=period, interval="1d")["Close"]
+        if len(df) < 2:
+            print(f"[AVISO] Ticker {ticker}: Não há dados suficientes. Pulando.")
+            continue
+        ticker_hist_dict[ticker] = df
     
     for ticker, hist_prices in ticker_hist_dict.items():
         # Ajusta timezone
