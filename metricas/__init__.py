@@ -6,8 +6,8 @@ from ._metricas import (
 )
 
 from .Metricas2 import (
-    calc_var,
-    calc_drawdown_limit,
+    calc_portfolio_var,
+    calc_portfolio_drawdown,
     calc_volatility,
 )
 

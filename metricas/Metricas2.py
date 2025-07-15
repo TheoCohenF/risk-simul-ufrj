@@ -1,50 +1,74 @@
 import pandas as pd
 import numpy as np
+import yfinance as yf
 
 # Value at Risk (VaR)
-def calc_var(price_series, confidence_level=0.95, horizon_days=1):
+def calc_portfolio_var(ticker_values, confidence_level=0.95, horizon_days=1, period="5y"):
     """
-    Calcula o Value at Risk (VaR) utilizando o método de simulação histórica.
+    Calcula o VaR histórico do portfólio ponderado pelos valores investidos.
 
-    Parameters:
-        price_series (pd.Series): Série de preços históricos.
-        confidence_level (float): Nível de confiança desejado (ex: 0.95 para 95%).
-        horizon_days (int): Quantidade de dias para o horizonte de risco.
+    Parâmetros:
+        ticker_values (dict): {ticker: valor_investido}
+        confidence_level (float): Nível de confiança (ex: 0.95)
+        horizon_days (int): Horizonte de risco em dias
+        period (str): Período dos preços (default '5y')
 
-    Returns:
-        float: VaR como um valor positivo indicando a perda potencial.
+    Retorna:
+        float: VaR do portfólio (valor positivo, perda potencial)
     """
-    if len(price_series) < horizon_days + 1:
-        raise ValueError("Série de preços muito curta para o horizonte dado.")
+    price_df = pd.DataFrame()
+    for ticker in ticker_values:
+        price_df[ticker] = yf.Ticker(ticker).history(period=period, interval="1d")["Close"]
+    price_df = price_df.dropna()
+    
+    returns = price_df.pct_change().dropna()
+    
+    total_investido = sum(ticker_values.values())
+    weights = np.array([valor / total_investido for valor in ticker_values.values()])
+    
+    # Retorno diário do portfólio (soma ponderada)
+    portfolio_returns = returns @ weights
 
-    returns = price_series.pct_change().dropna()
-    horizon_returns = returns * (horizon_days ** 0.5)
+    # Retorno para o horizonte
+    horizon_returns = portfolio_returns * np.sqrt(horizon_days)
     var_percentile = 100 * (1 - confidence_level)
     var_value = horizon_returns.quantile(var_percentile / 100)
 
-    return float(-var_value.iloc[0] if isinstance(var_value, pd.Series) else -var_value)
+    # VaR absoluto (quanto em R$ posso perder, não apenas percentual)
+    var_abs = var_value * total_investido
+
+    return float(-var_abs)
 
 
 # Drawdown limit
-def calc_drawdown_limit(price_series):
+def calc_portfolio_drawdown(ticker_values, period="5y"):
     """
-    Calcula o máximo drawdown da série de preços — maior perda a partir de um pico.
+    Calcula o máximo drawdown do portfólio, ponderado pelos valores investidos.
 
-    Parameters:
-        price_series (pd.Series): Série de preços históricos.
+    Parâmetros:
+        ticker_values (dict): {ticker: valor_investido}
+        period (str): período dos preços (default '5y')
 
-    Returns:
-        dict: Contém o valor do drawdown, a data de início e a data de fim.
+    Retorna:
+        dict: {'max_drawdown': valor, 'start_date': data, 'end_date': data}
     """
-    rolling_max = price_series.cummax()
-    drawdown = (price_series - rolling_max) / rolling_max
+    price_df = pd.DataFrame()
+    for ticker in ticker_values:
+        price_df[ticker] = yf.Ticker(ticker).history(period=period, interval="1d")["Close"]
+    price_df = price_df.dropna()
 
+    # Normaliza a evolução de cada ativo desde o início
+    normed = price_df / price_df.iloc[0]
+    weights = np.array([valor for valor in ticker_values.values()])
+    
+    # Valor diário do portfólio ao longo do tempo (ponderação explícita)
+    portfolio_value = normed.mul(weights, axis=1).sum(axis=1)
+    
+    rolling_max = portfolio_value.cummax()
+    drawdown = (portfolio_value - rolling_max) / rolling_max
     max_drawdown = drawdown.min()
     end_date = drawdown.idxmin()
-    if isinstance(end_date, pd.Series):
-        end_date = end_date.iloc[0]
-
-    start_date = price_series.loc[:end_date].idxmax()
+    start_date = portfolio_value.loc[:end_date].idxmax()
 
     return {
         'max_drawdown': max_drawdown,
