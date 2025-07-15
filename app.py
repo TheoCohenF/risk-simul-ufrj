@@ -26,7 +26,7 @@ def header():
         )
 
     with col2:
-        st.image("/Users/theocohen/Desktop/theo/risk-simul-ufrj/ufrj-vertical-cor-rgb-telas.png", width=270)
+        st.image("C:\\Users\\lcvf1\\OneDrive\\Documentos\\UFRJ\\06. Periodo\\Analise de Risco\\trabalho-final\\risk-simul-ufrj\\ufrj-vertical-cor-rgb-telas.png", width=270)
 
 def chat_box_button():
     st.markdown("""
@@ -53,6 +53,33 @@ def chat_box_button():
         st.markdown("")  # espaço se quiser adicionar algum texto acima do botão
         run = st.button('🚀 Gerar Simulação', use_container_width=True)
     
+    return run
+
+def edit_button():
+    st.markdown("""
+        <style>
+        div.stButton > button {
+            font-size: 20px !important;
+            font-weight: 600 !important;
+            padding: 20px 40px !important;
+            border-radius: 12px !important;
+            background-color:  !important;
+            color: black !important;
+            width: 200px !important;
+            height: 90px !important;
+            transition: background-color 0.3s ease;
+        }
+        div.stButton > button:hover {
+            background-color: #F0F0F0  !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("")
+        run = st.button('✏️ Editar Portfólio', use_container_width=True)
+
     return run
 
 
@@ -88,6 +115,11 @@ def chat_box():
 
 
 def simulation_main():
+    st.markdown("---")
+    if st.button("🔙 Voltar para Início"):
+        st.session_state.page = "home"
+        st.rerun()
+
     st.title("📊 Simulação de Portfólio")
 
     if "text" not in st.session_state or st.session_state.text.strip() == "":
@@ -159,7 +191,6 @@ def simulation_main():
             col4.metric("📉 Máx. Drawdown", f"{estresse * 100:.2f}%")
             col5.metric("🕒 Início do Período", f"{start_period}")
 
-              
             st.subheader("🔗 Matriz de Correlação")
             try:
                 corr_matrix = price_df.pct_change().dropna().corr()
@@ -217,6 +248,22 @@ def main():
                 st.markdown("### 💡 Recomendações de Portfólio com base no seu perfil:")
                 st.markdown("")
                 st.markdown(texto_llm)
+                
+                # Permitir ajuste
+                st.markdown("---")
+                st.markdown("### ✏️ Deseja ajustar o portfólio?")
+                nova_pergunta = st.text_input("Digite uma nova pergunta ou ajuste:", key="ajuste_portfolio")
+                col1, col2, col3 = st.columns([1.5, 1, 1.5])
+                with col2:
+                    st.markdown("")
+                    if edit_button():
+                        if nova_pergunta.strip():
+                            texto_editado = portofolio_generator_chain(
+                                nova_pergunta + "\nConsidere o portfólio sugerido anteriormente:\n" + st.session_state.text
+                            )
+                            st.session_state.text = texto_editado
+                        else:
+                            st.warning("Digite uma pergunta ou ajuste para editar o portfólio.")
 
                 st.divider()
 
