@@ -83,7 +83,7 @@ def json_generator_chain(text, user_question):
         - O JSON deve estar corretamente formatado.
         - Não inclua explicações ou comentários, apenas o objeto JSON.
         - Tenha certeza que os valores investidos em cada ação somam o total de investimento sugerido pelo usuário.
-        - COLOQUE APENAS O JSON DOS OBJETOS SUGERIDOS PELO TEXTO DE ENTRADA
+        - COLOQUE APENAS O JSON DOS OBJETOS SUGERIDOS PELO TEXTO DE ENTRADA, NÃO ALTERE NEM AUMENTE O NUMERO DE AÇÕES SUGERIDAS
 
         Exemplo de saída:
         json

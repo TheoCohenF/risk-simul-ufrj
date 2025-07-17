@@ -45,10 +45,7 @@ def plotly_correlation_heatmap(corr_matrix, title="Matriz de Correlação"):
     return fig
 
 def plotly_multi_ytd_historical_vs_simulation(ticker_value_dict, num_simulations=3000, period="5y"):
-    """
-    Plota, com Plotly, os preços históricos YTD e os caminhos simulados para múltiplos tickers.
-    ticker_hist_dict: dict {ticker: pandas.Series de preços}
-    """
+
     current_year = pd.Timestamp.today().year
     fig = go.Figure()
     ticker_hist_dict = {}
@@ -61,7 +58,7 @@ def plotly_multi_ytd_historical_vs_simulation(ticker_value_dict, num_simulations
         ticker_hist_dict[ticker] = df
     
     for ticker, hist_prices in ticker_hist_dict.items():
-        # Ajusta timezone
+
         if hist_prices.index.tz is not None:
             ytd_start = pd.Timestamp(f"{current_year}-01-01", tz=hist_prices.index.tz)
         else:
@@ -103,7 +100,7 @@ def plotly_multi_ytd_historical_vs_simulation(ticker_value_dict, num_simulations
         simulated_mean = np.mean(simulations, axis=0)
         sim_dates = np.insert(ytd_dates.values, 0, ytd_dates[0])
 
-        # Linha do preço real
+
         fig.add_trace(go.Scatter(
             x=ytd_dates,
             y=ytd_prices.values,
@@ -113,7 +110,7 @@ def plotly_multi_ytd_historical_vs_simulation(ticker_value_dict, num_simulations
             showlegend=True
         ))
 
-        # Linha da média simulada
+
         fig.add_trace(go.Scatter(
             x=sim_dates,
             y=simulated_mean,
@@ -134,107 +131,139 @@ def plotly_multi_ytd_historical_vs_simulation(ticker_value_dict, num_simulations
     )
     return fig
 
-def plot_volatility_vs_expected_return(ticker_list, periods="2y", num_simulations=3000, num_days=21):
+def plot_volatility_vs_expected_return(ticker_list, period="2y", num_simulations=3000, num_days=252):
     """
-    Plota volatilidade (X) x retorno esperado futuro (Y) usando simulação de Monte Carlo para cada ativo.
+    Plota Volatilidade Anualizada (X) vs Retorno Esperado (Y) usando simulação de Monte Carlo.
     - ticker_list: lista de tickers (ex: ["PETR4.SA", "VALE3.SA"])
-    - periods: período do histórico usado em cada ativo (ex: "2y")
-    - num_simulations: número de simulações para estimar retorno futuro
-    - num_days: horizonte da simulação de retorno futuro
+    - period: período de histórico para estimar retornos (ex: "2y")
+    - num_simulations: número de simulações de Monte Carlo
+    - num_days: horizonte da simulação (em dias úteis). Para anual, use 252.
     """
     results = []
+
     for ticker in ticker_list:
         try:
-            # Instancia a classe e pega preços históricos
-            model = ConstantExpectedReturn(ticker, periods)
-            hist_prices = model.get_historical_prices()
-            # Calcula volatilidade anualizada
-            vol = calc_volatility(hist_prices)
-            
-            model.run(num_simulations, num_days)
-            future_prices = model.get_future_prices()
-            start_price = hist_prices.iloc[-1]
-            expected_return = (future_prices.iloc[-1] / start_price) - 1
+            data = yf.Ticker(ticker).history(period=period, interval="1d")["Close"]
+            data = data.dropna()
 
-            results.append((ticker, vol, expected_return))
+            if len(data) < 2:
+                print(f"[AVISO] Dados insuficientes para {ticker}")
+                continue
+
+           
+            daily_returns = data.pct_change().dropna()
+            log_returns = np.log(1 + daily_returns)
+
+            mu = log_returns.mean()
+            sigma = log_returns.std()
+            start_price = data.iloc[-1]
+
+
+            
+            rng = np.random.default_rng()
+            all_simulations = np.zeros((num_simulations, num_days + 1))
+            all_simulations[:, 0] = start_price
+
+            for i in range(num_simulations):
+                sim_returns = rng.normal(mu, sigma, num_days)
+                sim_prices = [start_price]
+                for r in sim_returns:
+                    sim_prices.append(sim_prices[-1] * (1 + r))
+                all_simulations[i, :] = sim_prices
+
+           
+            final_returns = (all_simulations[:, -1] / all_simulations[:, 0]) - 1
+            expected_return = final_returns.mean()  
+
+            
+            annual_vol = sigma * np.sqrt(252)
+
+            results.append((ticker, annual_vol, expected_return))
+
         except Exception as e:
-            print(f"[AVISO] Problema ao processar {ticker}: {e}")
+            print(f"[ERRO] {ticker}: {e}")
             continue
 
-    # Plot com Plotly
+    
     fig = go.Figure()
-    for ticker, vol, ret in results:
+    colors = ['#1f77b4', '#aec7e8', '#d62728', '#ff9896', '#2ca02c', '#98df8a']
+
+    for idx, (ticker, vol, ret) in enumerate(results):
         fig.add_trace(go.Scatter(
-            x=[vol * 100],  # em %
-            y=[ret * 100],  # em %
+            x=[vol * 100],
+            y=[ret * 100],
             mode="markers+text",
-            marker=dict(size=15),
-            name=ticker,
+            marker=dict(size=16, color=colors[idx % len(colors)]),
             text=[ticker],
+            name=ticker,
             textposition="top center"
         ))
 
     fig.update_layout(
-        title=f"Volatilidade Anualizada vs Retorno Esperado ({num_days} dias)",
+        title=f"Volatilidade Anualizada vs Retorno Esperado (Horizonte: {num_days} dias úteis)",
         xaxis_title="Volatilidade Anualizada (%)",
-        yaxis_title=f"Retorno Esperado ({num_days} dias) (%)",
+        yaxis_title="Retorno Esperado (%)",
         hovermode="closest",
-        width=850,
+        width=900,
         height=550
     )
+
     return fig
 
-def plotly_portfolio_simulation(ticker_value_dict, num_simulations=3000, num_days=45, period="5y"):
-    import numpy as np
-    import pandas as pd
-    import plotly.graph_objects as go
-    import yfinance as yf
 
-    # Baixa preços históricos
+def plotly_portfolio_simulation(ticker_value_dict, num_simulations=3000, num_days=45, period="5y"):
+
+
+ 
     price_df = pd.DataFrame()
     for ticker in ticker_value_dict:
         price_df[ticker] = yf.Ticker(ticker).history(period=period, interval="1d")["Close"]
     price_df.dropna(inplace=True)
 
-    # Retornos diários
+     
     returns = price_df.pct_change().dropna()
 
-    # Pesos normalizados
+   
     total_value = sum(ticker_value_dict.values())
     weights = np.array([ticker_value_dict[ticker] / total_value for ticker in price_df.columns])
 
-    # Retorno diário do portfólio ponderado
+    
     portfolio_returns = returns.dot(weights)
 
-    # Preço do portfólio normalizado para 1
+    
     portfolio_price = (1 + portfolio_returns).cumprod()
 
-    # Média e desvio padrão dos retornos
+    
     mu = portfolio_returns.mean()
     sigma = portfolio_returns.std()
 
-    # Último preço real do portfólio
+    # 
     last_price = portfolio_price.iloc[-1]
 
-    # Datas para simulação (dias úteis após último dado)
+    
     sim_dates = pd.bdate_range(start=portfolio_price.index[-1], periods=num_days + 1)[1:]
 
     rng = np.random.default_rng()
 
-    # Criar array para armazenar todas as simulações
+    
     all_simulations = np.zeros((num_simulations, num_days))
 
-    # Simular retornos e calcular preços para cada simulação
+    
+
+    
     for i in range(num_simulations):
         sim_returns = rng.normal(mu, sigma, num_days)
         sim_prices = [last_price]
         for r in sim_returns:
             sim_prices.append(sim_prices[-1] * (1 + r))
-        all_simulations[i, :] = sim_prices[1:]  # ignorar o primeiro preço (last_price)
+        all_simulations[i, :] = sim_prices[1:]
+
+    retornos_percentuais = (all_simulations[:, -1] - last_price) / last_price
+    retorno_esperado_pct = np.mean(retornos_percentuais) * 100 
 
     fig = go.Figure()
 
-    # Linha do portfólio real (com valor investido)
+  
     fig.add_trace(go.Scatter(
         x=portfolio_price.index,
         y=portfolio_price.values * total_value,
@@ -243,7 +272,7 @@ def plotly_portfolio_simulation(ticker_value_dict, num_simulations=3000, num_day
         line=dict(width=3)
     ))
 
-    # Traçar todas simulações com transparência
+
     for i in range(num_simulations):
         fig.add_trace(go.Scatter(
             x=sim_dates,
@@ -251,11 +280,10 @@ def plotly_portfolio_simulation(ticker_value_dict, num_simulations=3000, num_day
             mode="lines",
             line=dict(color='rgba(0,0,255,0.03)'),
             showlegend=False,
-            hoverinfo='skip',  # <- ESSENCIAL: impede que apareça no hover
+            hoverinfo='skip', 
 
         ))
 
-    # Calcular e plotar média simulada
     mean_sim = np.mean(all_simulations, axis=0) * total_value
     fig.add_trace(go.Scatter(
         x=sim_dates,
@@ -273,6 +301,63 @@ def plotly_portfolio_simulation(ticker_value_dict, num_simulations=3000, num_day
         width=950,
         height=600,
         legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+    )
+
+    return fig, retorno_esperado_pct
+
+
+def plot_return_distribution(ticker_value_dict, num_simulations=3000, num_days=252, period="5y", lower_quantile=0.01, upper_quantile=0.99):
+
+    price_df = pd.DataFrame()
+    for ticker in ticker_value_dict:
+        price_df[ticker] = yf.Ticker(ticker).history(period=period, interval="1d")["Close"]
+    price_df.dropna(inplace=True)
+
+    returns = price_df.pct_change().dropna()
+
+    total_value = sum(ticker_value_dict.values())
+    weights = np.array([ticker_value_dict[ticker] / total_value for ticker in price_df.columns])
+
+    portfolio_returns = returns.dot(weights)
+
+    mu = portfolio_returns.mean()
+    sigma = portfolio_returns.std()
+
+    portfolio_price = (1 + portfolio_returns).cumprod()
+    last_price = portfolio_price.iloc[-1]
+
+    rng = np.random.default_rng()
+    sim_returns = rng.normal(mu, sigma, size=(num_simulations, num_days))
+
+    sim_prices = np.zeros_like(sim_returns)
+    sim_prices[:, 0] = last_price * (1 + sim_returns[:, 0])
+    for day in range(1, num_days):
+        sim_prices[:, day] = sim_prices[:, day-1] * (1 + sim_returns[:, day])
+
+    final_returns = (sim_prices[:, -1] - last_price) / last_price
+
+    # Filtrando outliers pelos quantis
+    lower_bound = np.quantile(final_returns, lower_quantile)
+    upper_bound = np.quantile(final_returns, upper_quantile)
+    filtered_returns = final_returns[(final_returns >= lower_bound) & (final_returns <= upper_bound)]
+
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=filtered_returns * 100,
+        nbinsx=60,
+        marker_color='#1f77b4',
+        opacity=0.75,
+        name='Retornos Simulados (%)'
+    ))
+
+    fig.update_layout(
+        title=f"Distribuição dos Retornos Simulados do Portfólio ({num_days} dias) - Sem Outliers",
+        xaxis_title="Retorno Simulado (%)",
+        yaxis_title="Frequência",
+        bargap=0.1,
+        width=700,
+        height=500,
+        template='plotly_white'
     )
 
     return fig

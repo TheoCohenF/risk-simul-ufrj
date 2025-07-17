@@ -5,8 +5,7 @@ import plotly.graph_objects as go
 from dotenv import load_dotenv
 from langchain_bot import portofolio_generator_chain, json_generator_chain
 from metricas.Metricas2 import calc_portfolio_var, calc_portfolio_drawdown, calc_volatility  
-from plots.plots_functions import plotly_correlation_heatmap, plotly_multi_ytd_historical_vs_simulation, plot_volatility_vs_expected_return, plotly_portfolio_simulation
-# certifique-se de estar importando 
+from plots.plots_functions import plotly_correlation_heatmap, plotly_multi_ytd_historical_vs_simulation, plot_volatility_vs_expected_return, plotly_portfolio_simulation, plot_return_distribution
 import numpy as np
 
 #rom simulation import simulation_main
@@ -14,6 +13,8 @@ import numpy as np
 load_dotenv()
 
 st.set_page_config(layout="wide", page_title="Simulador de Portfólio", page_icon="📈")
+
+
 
 # === Header com logo ===
 def header():
@@ -26,7 +27,7 @@ def header():
         )
 
     with col2:
-        st.image("C:\\Users\\lcvf1\\OneDrive\\Documentos\\UFRJ\\06. Periodo\\Analise de Risco\\trabalho-final\\risk-simul-ufrj\\ufrj-vertical-cor-rgb-telas.png", width=270)
+        st.image("/Users/theocohen/Desktop/theo/risk-simul-ufrj/ufrj-vertical-cor-rgb-telas.png", width=270)
 
 def chat_box_button():
     st.markdown("""
@@ -115,12 +116,29 @@ def chat_box():
 
 
 def simulation_main():
-    st.markdown("---")
+    
     if st.button("🔙 Voltar para Início"):
         st.session_state.page = "home"
         st.rerun()
 
-    st.title("📊 Simulação de Portfólio")
+    col1, col2, col3 = st.columns([2,1,2])
+    with col1:
+
+        st.title("📊 Simulação de Portfólio")
+
+    with col3:
+        st.markdown("### ✏️ Deseja ajustar o portfólio?")
+        nova_pergunta = st.text_input("Digite uma nova pergunta ou ajuste:", key="ajuste_portfolio")
+        col1, col2, col3 = st.columns([1.5, 1, 1.5])
+        
+        if nova_pergunta.strip():
+            texto_editado = portofolio_generator_chain(
+                nova_pergunta + "\nConsidere o portfólio sugerido anteriormente:\n" + st.session_state.text
+            )
+            st.session_state.text = texto_editado
+            st.session_state.changes = True
+        else:
+            st.warning("Digite uma pergunta ou ajuste para editar o portfólio.")
 
     if "text" not in st.session_state or st.session_state.text.strip() == "":
         st.warning("⚠️ Nenhuma recomendação encontrada. Volte à página inicial e descreva seu perfil.")
@@ -132,8 +150,17 @@ def simulation_main():
     if "user_input" not in st.session_state:
         st.session_state.user_input = ""
 
-    # === Gerar o dicionário de alocação via LLM ===
-    ticker_values = json_generator_chain(st.session_state.text, st.session_state.user_input)
+    
+    if st.session_state.get("changes", False):
+        ticker_values = json_generator_chain(st.session_state.text, st.session_state.user_input)
+        st.session_state.ticker_values = ticker_values
+        st.session_state.changes = False 
+    elif "ticker_values" not in st.session_state:
+   
+        st.session_state.ticker_values = json_generator_chain(st.session_state.text, st.session_state.user_input)
+
+
+    ticker_values = st.session_state.ticker_values
 
     # ==== Mostrar tickers com nomes bonitos de forma compacta e centralizada ====
     nice_names = {}
@@ -160,7 +187,7 @@ def simulation_main():
             var = calc_portfolio_var(ticker_values, confidence_level=0.95, horizon_days=1, period="10y")
             drawdown = calc_portfolio_drawdown(ticker_values, period="10y")
 
-            # Preço e retorno do portfólio
+            
             price_df = pd.DataFrame()
             for ticker in ticker_values:
                 price_df[ticker] = yf.Ticker(ticker).history(period="10y", interval="1d")["Close"]
@@ -181,47 +208,77 @@ def simulation_main():
             # Início do período
             start_period = price_df.index[0].date()
 
+        
+
             
             st.markdown("### 📈 Métricas de Risco e Retorno")
             st.divider()
-            col1, col2, col3, col4, col5 = st.columns(5)
-            col1.metric("📉 VaR (1 dia, 95%)", f"${var:,.2f}")
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
+            col1.metric("📉 VaR", f"${var:,.2f}")
             col2.metric("📊 Volatilidade Anual", f"{volatility * 100:.2f}%")
             col3.metric("📈 Sharpe Ratio", f"{sharpe:.2f}")
             col4.metric("📉 Máx. Drawdown", f"{estresse * 100:.2f}%")
             col5.metric("🕒 Início do Período", f"{start_period}")
+            
+            st.divider()
 
-            st.subheader("🔗 Matriz de Correlação")
-            try:
-                corr_matrix = price_df.pct_change().dropna().corr()
-                fig_corr = plotly_correlation_heatmap(corr_matrix, title="Matriz de Correlação dos Ativos")
-                st.plotly_chart(fig_corr, use_container_width=True)
-            except Exception as e:
-                st.error(f"Erro ao gerar matriz de correlação: {e}")
+            
+            row1_col1, row1_col2 = st.columns([1.2, 1.8])
+            with row1_col1:
+                st.subheader("🔗 Matriz de Correlação")
+                try:
+                    corr_matrix = price_df.pct_change().dropna().corr()
+                    fig_corr = plotly_correlation_heatmap(corr_matrix, title="Correlação dos Ativos")
+                    st.markdown("")
+                    st.markdown("")
+                    st.markdown("")
+                    st.plotly_chart(fig_corr, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Erro ao gerar matriz de correlação: {e}")
+
+            with row1_col2:
+                st.subheader("📅 Simulação Monte Carlo")
+                try:
+                    fig, retorno_esperado = plotly_portfolio_simulation(ticker_values, num_simulations=1000, num_days=100, period="5y")
+                    st.plotly_chart(fig, use_container_width=True)
+                    col6.metric("📈 Ret. Simulação 100 dias", f"{retorno_esperado:.2f}%")
+
+
+                except Exception as e:
+                    st.error(f"Erro ao gerar gráfico de simulações: {e}")
 
             st.markdown("---")
 
-            # ----- Gráfico 2: Preços Reais vs Simulados (YTD) -----
-            st.subheader("📅 Preços Reais vs Simulados (Ano Atual)")
-            try:
-                fig = plotly_portfolio_simulation(ticker_values, num_simulations=1000, num_days=45, period="5y")
-                st.plotly_chart(fig, use_container_width=True)
-            except Exception as e:
-                st.error(f"Erro ao gerar gráfico de simulações: {e}")
+            row2_col1, row2_col2 = st.columns(2)
 
-            st.markdown("---")
+            with row2_col1:
+                st.subheader("⚖️ Volatilidade vs Retorno Esperado")
+                try:
+                    tickers = list(ticker_values.keys())
+                    fig_vol_ret = plot_volatility_vs_expected_return(
+                        ticker_values,
+                        period="5y",
+                        num_simulations=3000,
+                        num_days=252
+                    )
+                    st.plotly_chart(fig_vol_ret, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Erro ao gerar gráfico de volatilidade x retorno: {e}")
 
-            # ----- Gráfico 3: Volatilidade vs Retorno Esperado -----
-            st.subheader("⚖️ Volatilidade vs Retorno Esperado")
-            try:
-                tickers = list(ticker_values.keys())
-                fig_vol_ret = plot_volatility_vs_expected_return(tickers, periods="2y", num_simulations=3000, num_days=21)
-                st.plotly_chart(fig_vol_ret, use_container_width=True)
-            except Exception as e:
-                st.error(f"Erro ao gerar gráfico de volatilidade x retorno: {e}")
-                    
+            with row2_col2:
+                st.subheader("📊 Distribuição dos Retornos Simulados")
+                try:
+                    fig_return_dist = plot_return_distribution(
+                        ticker_values,
+                        period="5y",
+                        num_simulations=3000,
+                        num_days=252
+                    )
+                    st.plotly_chart(fig_return_dist, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Erro ao gerar distribuição dos retornos: {e}")
         except Exception as e:
-            st.error(f"Erro ao calcular métricas: {e}")
+            st.error(f"Erro ao gerar gráfico de simulações: {e}")
 
 
 # === Resposta do LLM ===
@@ -248,22 +305,6 @@ def main():
                 st.markdown("### 💡 Recomendações de Portfólio com base no seu perfil:")
                 st.markdown("")
                 st.markdown(texto_llm)
-                
-                # Permitir ajuste
-                st.markdown("---")
-                st.markdown("### ✏️ Deseja ajustar o portfólio?")
-                nova_pergunta = st.text_input("Digite uma nova pergunta ou ajuste:", key="ajuste_portfolio")
-                col1, col2, col3 = st.columns([1.5, 1, 1.5])
-                with col2:
-                    st.markdown("")
-                    if edit_button():
-                        if nova_pergunta.strip():
-                            texto_editado = portofolio_generator_chain(
-                                nova_pergunta + "\nConsidere o portfólio sugerido anteriormente:\n" + st.session_state.text
-                            )
-                            st.session_state.text = texto_editado
-                        else:
-                            st.warning("Digite uma pergunta ou ajuste para editar o portfólio.")
 
                 st.divider()
 
